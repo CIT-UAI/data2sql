@@ -66,7 +66,17 @@ def shp2postgis(ifolder):
         shape = geopandas.read_file(i)
         with open("{}.{}".format(os.path.splitext(i)[0], "config")) as file_shp_config:
             shp_config = json.load(file_shp_config)
-        shape.to_postgis(shp_config["name"], config[shp_config["db"]])
+        geopandas_params_keys = ["if_exist",
+                                "schema",
+                                "index",
+                                "index_label",
+                                "chunksize",
+                                "dtype"]
+        geopandas_params = {}
+        for p in geopandas_params_keys:
+            if p in shp_config:
+                geopandas_params[p] = shp_config[p]
+        shape.to_postgis(shp_config["name"], config[shp_config["db"]], **geopandas_params)
 
 if __name__ == "__main__":
     import argparse

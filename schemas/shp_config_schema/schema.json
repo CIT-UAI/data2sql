@@ -7,6 +7,10 @@
             "description": "Name of table to write the data",
             "type": "string"
         },
+        "db": {
+            "description": "Reference name of the db to load the shape",
+            "type": "string"
+        },
         "if_exist": {
             "description": "What to do un case the table already exists",
             "type": "string",

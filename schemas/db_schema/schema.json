@@ -2,7 +2,7 @@
     "title": "Shape config data",
     "description": "Reference name to the db",
     "type": "object",
-    "allOf": [{
+    "additionalProperties": {
         "type": "object",
         "description": "The DB reference name to use",
         "properties": {
@@ -29,5 +29,5 @@
             "user",
             "db"
         ]
-    }]
+    }
 }

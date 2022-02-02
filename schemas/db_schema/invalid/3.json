@@ -1,0 +1,5 @@
+{
+    "url": "localhost:500",
+    "password": "12345",
+    "db": "test_db"
+}

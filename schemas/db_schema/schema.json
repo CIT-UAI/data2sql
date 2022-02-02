@@ -1,0 +1,33 @@
+{
+    "title": "Shape config data",
+    "description": "Reference name to the db",
+    "type": "object",
+    "allOf": [{
+        "type": "object",
+        "description": "The DB reference name to use",
+        "properties": {
+            "url": {
+                "description": "Url and port to the server",
+                "type": "string",
+                "pattern": "(?<!\/)$"
+            },
+            "user": {
+                "description": "User of the server",
+                "type": "string"
+            },
+            "password": {
+                "description": "User's password",
+                "type": "string"
+            },
+            "db": {
+                "description": "DB Name to connect",
+                "type": "string"
+            }
+        },
+        "required": [
+            "url",
+            "user",
+            "db"
+        ]
+    }]
+}

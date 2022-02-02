@@ -1,5 +1,7 @@
 {
-    "url": "localhost:500",
-    "password": "12345",
-    "db": "test_db"
+    "test_db": {
+        "url": "localhost:500",
+        "password": "12345",
+        "db": "test_db"
+    }
 }

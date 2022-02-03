@@ -86,8 +86,9 @@ def shp2postgis(shp_file_path):
             geopandas_params[p] = shp_config[p]
     if debug:
         geopandas_params["if_exists"] = "replace"
-    print(shp_config)
-    print("importing to postgis")
+    if debug:
+        print(shp_config)
+        print("importing to postgis")
     shape.to_postgis(shp_config["name"], config[shp_config["db"]], **geopandas_params)
 
 def fast_json(file):

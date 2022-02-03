@@ -1,13 +1,16 @@
+from plistlib import load
 import geopandas
 import glob
 import os.path
 import json
 import sqlalchemy
 import jsonschema
+import pathlib
 
 script_path = os.path.dirname(os.path.realpath(__file__))
 
 debug = True
+config = None
 
 def replace_keys(shp_config, keys):
     for option in shp_config:
@@ -40,16 +43,6 @@ def valid_db_config(ifolder):
             data = json.load(json_file)
         jsonschema.validate(data, config_schema)
 
-def valid_shp_config(ifolder):
-    with open(os.path.join(script_path, "schemas/shp_config_schema/schema.json")) as schema:
-        config_schema = json.load(schema)
-    for i in glob.glob(os.path.join(ifolder, "**/*.shp"), recursive=True):
-        if not os.path.exists("{}.{}".format(os.path.splitext(i)[0], "json")):
-            continue
-        with open("{}.{}".format(os.path.splitext(i)[0], "json")) as file_shp_config:
-            shp_config = json.load(file_shp_config)
-        jsonschema.validate(shp_config, config_schema)
-
 def get_config(ifolder):
     config = {}
     for config_file in glob.glob(os.path.join(ifolder, "**/dbs.json"), recursive=True):
@@ -70,35 +63,70 @@ def get_config(ifolder):
             config[db] = engine
     return config
 
-def shp2postgis(ifolder):
+def shp2postgis(shp_file_path):
+    try:
+        shape = geopandas.read_file(shp_file_path)
+    except Exception as e:
+        print(e)
+        raise NameError("The file {}\n can't be loaded".format(shp_file_path))
+    shp_config = fast_json(shp_file_path.with_suffix(".json"))
+    rep_keys = {}
+    rep_keys["{file_name}"] = shp_file_path.name
+    rep_keys["{file_name_no_ext}"] = shp_file_path.stem
+    shp_config = replace_keys(shp_config, rep_keys)
+    geopandas_params_keys = ["if_exists",
+                            "schema",
+                            "index",
+                            "index_label",
+                            "chunksize",
+                            "dtype"]
+    geopandas_params = {}
+    for p in geopandas_params_keys:
+        if p in shp_config:
+            geopandas_params[p] = shp_config[p]
+    if debug:
+        geopandas_params["if_exists"] = "replace"
+    print(shp_config)
+    print("importing to postgis")
+    shape.to_postgis(shp_config["name"], config[shp_config["db"]], **geopandas_params)
+
+def fast_json(file):
+    ofile = open(file)
+    data = json.load(ofile)
+    ofile.close()
+    return data
+
+class Cache_json:
+    def __init__(self, path):
+        self.path = path
+        self.schema = None
+    def get(self):
+        if self.schema is None:
+            self.schema = fast_json(self.path)
+        return self.schema
+
+supported_extensions = {
+    "shp": {
+        "scheme_config": Cache_json(pathlib.Path(os.path.join(script_path, "schemas/shp_config_schema/schema.json"))),
+        "export_f": shp2postgis
+    }
+}
+
+def load_by_extensions(ifolder):
+    for extension in supported_extensions:
+        for file in glob.glob(os.path.join(ifolder, "**/*.{}".format(extension)), recursive=True):
+            file = pathlib.Path(file)
+            config_file = file.with_suffix(".json")
+            if not config_file.exists():
+                continue
+            jsonschema.validate(fast_json(config_file), supported_extensions[extension]["scheme_config"].get())
+            supported_extensions[extension]["export_f"](file)
+
+def geo2postgis(ifolder):
+    global config
     valid_db_config(ifolder)
-    valid_shp_config(ifolder)
     config = get_config(ifolder)
-    for i in glob.glob(os.path.join(ifolder, "**/*.shp"), recursive=True):
-        if not os.path.exists("{}.{}".format(os.path.splitext(i)[0], "json")):
-            continue
-        shape = geopandas.read_file(i)
-        with open("{}.{}".format(os.path.splitext(i)[0], "json")) as file_shp_config:
-            shp_config = json.load(file_shp_config)
-        rep_keys = {}
-        rep_keys["{file_name}"] = os.path.basename(i)
-        rep_keys["{file_name_no_ext}"] = os.path.splitext(rep_keys["{file_name}"])[0]
-        shp_config = replace_keys(shp_config, rep_keys)
-        geopandas_params_keys = ["if_exists",
-                                "schema",
-                                "index",
-                                "index_label",
-                                "chunksize",
-                                "dtype"]
-        geopandas_params = {}
-        for p in geopandas_params_keys:
-            if p in shp_config:
-                geopandas_params[p] = shp_config[p]
-        if debug:
-            geopandas_params["if_exists"] = "replace"
-        print(shp_config)
-        print("importing to postgis")
-        shape.to_postgis(shp_config["name"], config[shp_config["db"]], **geopandas_params)
+    load_by_extensions(ifolder)
 
 if __name__ == "__main__":
     import argparse
@@ -106,6 +134,6 @@ if __name__ == "__main__":
     parser.add_argument('folder', help='input folder')
     args = parser.parse_args()
     if os.path.isdir(args.folder):
-        shp2postgis(args.folder)
+        geo2postgis(args.folder)
     else:
         raise NameError("No input folder")

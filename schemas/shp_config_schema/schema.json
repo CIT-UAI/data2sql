@@ -22,11 +22,11 @@
         },
         "index": {
             "desciption": "If true, the index column will be written",
-            "type": "boolean"
+            "type": ["boolean", "string", "array"]
         },
         "index_label": {
             "description": "In case the the index column is recorded, the column will be writen with this name",
-            "type": "string"
+            "type": ["string", "array"]
         },
         "chunksize": {
             "description": "Batch of rows to write to the db, if the shape is big, choose a not too big number",

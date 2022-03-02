@@ -11,6 +11,10 @@
                 "type": "string",
                 "pattern": "(?<!\/)$"
             },
+            "port": {
+                "description": "Port for the SQL server",
+                "type": "integer"
+            },
             "user": {
                 "description": "User of the server",
                 "type": "string"

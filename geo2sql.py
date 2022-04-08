@@ -30,6 +30,10 @@ def fast_json(file):
     return data
 
 def join2configs(config1, config2):
+    if config1 is None:
+        return config2
+    if config2 is None:
+        return config1
     if 'mix' in config2 and config2['mix'] == 'clean':
         return config2
     if ('mix' in config2 and config2['mix'] == 'replace') or \
@@ -43,21 +47,16 @@ def join2configs(config1, config2):
     raise NameError("Not supported way to join configs: {}".format(config2['mix']))
 
 def get_file_config(geo_file_path, config):
-    file_config = fast_json(geo_file_path.with_suffix(".json"))
-    if 'mix' in file_config and file_config['mix'] == 'clean':
-        return file_config
-    _ = os.path.split(geo_file_path)
-    ret = {}
-    conn = None
-    for _dir in range(len(_)-1):
-        pconfig = os.path.join(*_[0:_dir], "config.json")
-        if pconfig in config:
-            ret = join2configs(ret, config[pconfig]['default'])
-            if file_config['db'] in config[pconfig]['dbs']:
-                conn = config[pconfig]['dbs'][file_config['db']]
-    if conn is None:
+    file_config = geo_file_path.with_suffix(".json")
+    if os.path.exists(file_config): 
+        file_config = fast_json(geo_file_path.with_suffix(".json"))
+    else:
+        file_config = None
+    g_default, g_config = get_closer_config(config, geo_file_path)
+    file_config = join2configs(g_default, file_config)
+    if g_config is None or file_config['db'] not in g_config:
         raise NameError("The DB {} was not found".format(file_config['db']))
-    return conn, ret
+    return g_config[file_config['db']], file_config
 
 def pandas2sql(geo_file_path, config):
     try:
@@ -66,6 +65,8 @@ def pandas2sql(geo_file_path, config):
         print(e)
         raise NameError("The file {}\n can't be loaded".format(geo_file_path))
     conn, geo_config = get_file_config(geo_file_path, config)
+    if 'name' not in geo_config or 'db' not in geo_config:
+        return
     rep_keys = {}
     rep_keys["{file_name}"] = geo_file_path.name
     rep_keys["{file_name_no_ext}"] = geo_file_path.stem
@@ -83,44 +84,54 @@ def pandas2sql(geo_file_path, config):
     if __debug__:
         geopandas_params["if_exists"] = "replace"
     if __debug__:
-        print("shape config {}".format(geo_file_path))
+        print("geo file config {}".format(geo_file_path))
         print(geo_config)
-        print("importing to postgis")
+        print("importing to sql")
         print(geopandas_params)
-    geo_file.to_postgis(geo_config["name"], conn, **geopandas_params)
+    if ('optional_index' in geo_config) and 'index_label' not in geopandas_params:
+        for i in geo_config['optional_index']:
+            if i in geo_file.columns:
+                geopandas_params['index'] = False
+                geopandas_params['index_label'] = i
+                break
+    geo_file.to_postgis(geo_config["name"].lower(), conn, **geopandas_params)
 
 #the "files" must be sorted, the idea
 #is first be containers folders
 #then the contained ones with their files
-def get_closer_file(files, one):
-    dirs = os.path.split(one)[:-1]
+def get_closer_config(files, one):
+    dirs = one.parts[0:-1]
     for i in reversed(range(len(dirs))):
-        _file = os.path.join(*dirs[0:i], 'config.json')
+        _file = pathlib.Path(os.path.join(*dirs[0:i], 'config.json'))
         if _file in files:
-            return _file
-    return None
+            _ = files[_file]
+            return _['default'], _['dbs']
+    return None, None
 
 def get_config(ifolder):
     config = {}
-    default = {}
     #This is tricky, in order to join configs, all of them will be sorted
     #because, in that way, every next folder, will be contained in a upper one
     #is easier to merge
     configs = glob.glob(os.path.join(ifolder, "**/config.json"), recursive=True)
     configs.sort()
+    configs = list(map(pathlib.Path, configs))
     for config_file in configs:
-        config[config_file] = {}
+        config[config_file] = {'dbs': {}, 'default': {}}
         with open(config_file) as json_file:
             data = json.load(json_file)
         for db in data['dbs']:
-            data[db] = get_safe_engine(data[db])
+            data['dbs'][db] = get_safe_engine(data['dbs'][db])
+        upper_default, upper_dbs = get_closer_config(config, config_file)
         if 'default' in data:
-            upper = get_closer_file(configs, config_file)
-            if upper is None:
-                default[config_file] = data['default']
+            if upper_default is None:
+                config[config_file]['default'] = data['default']
             else:
-                default[config_file] = join2configs(upper, data['default'])
-        config[config_file] = data['dbs']
+                config[config_file]['default'] = join2configs(upper_default, data['default'])
+        if upper_dbs is not None:
+            config[config_file]['dbs'] = upper_dbs
+        for i in data['dbs']:
+            config[config_file]['dbs'][i] = data['dbs'][i]
     return config
 
 class Cache_json:

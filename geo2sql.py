@@ -29,22 +29,26 @@ def fast_json(file):
         data = json.load(f)
     return data
 
-def join2configs(config1, config2):
-    if config1 is None:
-        return config2
-    if config2 is None:
-        return config1
-    if 'mix' in config2 and config2['mix'] == 'clean':
-        return config2
-    if ('mix' in config2 and config2['mix'] == 'replace') or \
-        'mix' not in config2:
-        ret = config1.copy()
+def join2configs(container, contained):
+    if container is not None:
+        container = container.copy()
+    if contained is not None:
+        contained = contained.copy()
+    if container is None:
+        return contained
+    if contained is None:
+        return container
+    if 'mix' in contained and contained['mix'] == 'clean':
+        return contained
+    if ('mix' in contained and contained['mix'] == 'replace') or \
+        'mix' not in contained:
+        ret = container.copy()
         if 'mix' in ret:
             del ret['mix']
-        for i in config2:
-            config1[i] = config2[i]
+        for i in contained:
+            ret[i] = contained[i]
         return ret
-    raise NameError("Not supported way to join configs: {}".format(config2['mix']))
+    raise NameError("Not supported way to join configs: {}".format(contained['mix']))
 
 def get_file_config(geo_file_path, config):
     file_config = geo_file_path.with_suffix(".json")
@@ -59,8 +63,13 @@ def get_file_config(geo_file_path, config):
     return g_config[file_config['db']], file_config
 
 def pandas2sql(geo_file_path, config):
+    if __debug__:
+        print("Reading {}".format(geo_file_path))
     try:
         geo_file = geopandas.read_file(geo_file_path)
+        _ = geo_file.geometry.name
+        geo_file.columns = geo_file.columns.str.upper()
+        geo_file = geo_file.set_geometry(_.upper())
     except Exception as e:
         print(e)
         raise NameError("The file {}\n can't be loaded".format(geo_file_path))
@@ -81,20 +90,21 @@ def pandas2sql(geo_file_path, config):
     for p in geopandas_params_keys:
         if p in geo_config:
             geopandas_params[p] = geo_config[p]
-    if __debug__:
-        geopandas_params["if_exists"] = "replace"
+    if ('optional_index' in geo_config) and 'index_label' not in geopandas_params:
+        for opt in geo_config['optional_index']:
+            if opt in geo_file.columns:
+                geopandas_params['index'] = False
+                geopandas_params['index_label'] = opt
+                break
     if __debug__:
         print("geo file config {}".format(geo_file_path))
         print(geo_config)
         print("importing to sql")
         print(geopandas_params)
-    if ('optional_index' in geo_config) and 'index_label' not in geopandas_params:
-        for i in geo_config['optional_index']:
-            if i in geo_file.columns:
-                geopandas_params['index'] = False
-                geopandas_params['index_label'] = i
-                break
+        print(geo_file.columns)
     geo_file.to_postgis(geo_config["name"].lower(), conn, **geopandas_params)
+    if __debug__:
+        print("End reading {}\n".format(geo_file_path))
 
 #the "files" must be sorted, the idea
 #is first be containers folders

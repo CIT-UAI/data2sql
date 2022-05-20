@@ -5,6 +5,7 @@ import json
 import sqlalchemy
 import jsonschema
 import pathlib
+import re
 
 script_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -62,14 +63,15 @@ def get_file_config(geo_file_path, config):
         raise NameError("The DB {} was not found".format(file_config['db']))
     return g_config[file_config['db']], file_config
 
-def pandas2sql(geo_file_path, config):
+def pandas2sql(geo_file_path, config, arcgis=True):
     if __debug__:
         print("Reading {}".format(geo_file_path))
     try:
         geo_file = geopandas.read_file(geo_file_path)
         _ = geo_file.geometry.name
-        geo_file.columns = geo_file.columns.str.upper()
-        geo_file = geo_file.set_geometry(_.upper())
+        if arcgis:
+            geo_file.columns = geo_file.columns.str.lower()
+        geo_file = geo_file.set_geometry(_.lower())
     except Exception as e:
         print(e)
         raise NameError("The file {}\n can't be loaded".format(geo_file_path))
@@ -159,6 +161,25 @@ supported_extensions = {
         "export_f": pandas2sql
     }
 }
+
+import hashlib
+
+def hash_file(file):
+    BUF_SIZE = 65536
+    sha256 = hashlib.sha256()
+    with open(file, 'rb') as f:
+        while True:
+            data = f.read(BUF_SIZE)
+            if not data:
+                break
+            sha256.update(data)
+    return sha256.hexdigest()
+
+def need_update(file, config):
+    status = file.with_suffix("status")
+    if not os.path.exists(status):
+        return False
+    
 
 def load_by_extensions(ifolder, config):
     for extension in supported_extensions:

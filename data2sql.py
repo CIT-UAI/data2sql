@@ -1,15 +1,20 @@
 import geopandas
 import glob
+import os
 import os.path
 import json
 import sqlalchemy
 import jsonschema
 import pathlib
 import re
+import osgeo.gdal
+
+import tempfile
 
 script_path = os.path.dirname(os.path.realpath(__file__))
 
 def get_safe_engine(conn):
+    return conn
     engine = sqlalchemy.create_engine(conn)
     connection = engine.connect()
     connection.close()
@@ -64,6 +69,7 @@ def get_file_config(geo_file_path, config):
     return g_config[file_config['db']], file_config
 
 def pandas2sql(geo_file_path, config, arcgis=True):
+    output = tempfile.NamedTemporaryFile(suffix=".gpkg")
     if __debug__:
         print("Reading {}".format(geo_file_path))
     try:
@@ -104,7 +110,17 @@ def pandas2sql(geo_file_path, config, arcgis=True):
         print("importing to sql")
         print(geopandas_params)
         print(geo_file.columns)
-    geo_file.to_postgis(geo_config["name"].lower(), conn, **geopandas_params)
+    os.remove(output.name)
+    geo_file.to_file(output.name, layer = geo_config["name"].lower()) 
+    #options = {
+    #  
+    #}
+    osgeo.gdal.VectorTranslate(
+        conn,
+        output.name,
+        options = ''
+    )
+    #geo_file.to_postgis(geo_config["name"].lower(), conn, **geopandas_params)
     if __debug__:
         print("End reading {}\n".format(geo_file_path))
 
